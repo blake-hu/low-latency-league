@@ -13,7 +13,7 @@
 
 - Results: Add 789, Modify 11150, Volume 44, Total 50283
 
-## modify_order: Avoid iterating over all price levels
+### modify_order: Avoid iterating over all price levels
 
 - Results: Add 633, Modify 50, Volume 43, Total 519
 - Store map of `(order_id, order)` to get order from order_id
