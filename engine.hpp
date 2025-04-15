@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <list>
 #include <map>
+#include <unordered_map>
 
 enum class Side : uint8_t { BUY, SELL };
 
@@ -22,6 +23,7 @@ struct Order {
 struct Orderbook {
   std::map<PriceType, std::list<Order>, std::greater<PriceType>> buyOrders;
   std::map<PriceType, std::list<Order>> sellOrders;
+  std::unordered_map<IdType, Order> orders;
 };
 
 extern "C" {

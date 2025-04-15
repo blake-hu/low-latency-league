@@ -43,48 +43,61 @@ uint32_t match_order(Orderbook &orderbook, const Order &incoming) {
   if (order.side == Side::BUY) {
     // For a BUY, match with sell orders priced at or below the order's price.
     matchCount = process_orders(order, orderbook.sellOrders, std::less<>());
-    if (order.quantity > 0)
+    if (order.quantity > 0) {
       orderbook.buyOrders[order.price].push_back(order);
+      orderbook.orders[order.id] = order;
+    }
   } else { // Side::SELL
     // For a SELL, match with buy orders priced at or above the order's price.
     matchCount = process_orders(order, orderbook.buyOrders, std::greater<>());
-    if (order.quantity > 0)
+    if (order.quantity > 0) {
       orderbook.sellOrders[order.price].push_back(order);
+      orderbook.orders[order.id] = order;
+    }
   }
   return matchCount;
 }
 
 // Templated helper to cancel an order within a given orders map.
 template <typename OrderMap>
-bool modify_order_in_map(OrderMap &ordersMap, IdType order_id,
+bool modify_order_in_map(OrderMap &ordersMap, Order order,
                          QuantityType new_quantity) {
-  for (auto it = ordersMap.begin(); it != ordersMap.end();) {
-    auto &orderList = it->second;
-    for (auto orderIt = orderList.begin(); orderIt != orderList.end();) {
-      if (orderIt->id == order_id) {
-        if (new_quantity == 0)
-          orderIt = orderList.erase(orderIt);
-        else {
-          orderIt->quantity = new_quantity;
-          return true;
-        }
-      } else {
-        ++orderIt;
+  IdType order_id = order.id;
+  PriceType price = order.price;
+  auto orderListIt = ordersMap.find(price);
+  if (orderListIt == ordersMap.end())
+    return false;
+  auto &orderList = orderListIt->second;
+
+  for (auto orderIt = orderList.begin(); orderIt != orderList.end();) {
+    if (orderIt->id == order_id) {
+      if (new_quantity == 0)
+        orderIt = orderList.erase(orderIt);
+      else {
+        orderIt->quantity = new_quantity;
+        return true;
       }
+    } else {
+      ++orderIt;
     }
-    if (orderList.empty())
-      it = ordersMap.erase(it);
-    else
-      ++it;
   }
+
+  if (orderList.empty())
+    ordersMap.erase(price);
+
   return false;
 }
 
 void modify_order_by_id(Orderbook &orderbook, IdType order_id,
                         QuantityType new_quantity) {
-  if (modify_order_in_map(orderbook.buyOrders, order_id, new_quantity))
+  auto orderIt = orderbook.orders.find(order_id);
+  if (orderIt == orderbook.orders.end())
     return;
-  if (modify_order_in_map(orderbook.sellOrders, order_id, new_quantity))
+  Order order = orderIt->second;
+
+  if (modify_order_in_map(orderbook.buyOrders, order, new_quantity))
+    return;
+  if (modify_order_in_map(orderbook.sellOrders, order, new_quantity))
     return;
 }
 
