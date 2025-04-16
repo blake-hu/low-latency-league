@@ -26,3 +26,8 @@
 - However, we get slower runtimes
 - This may be because hashing into an unordered_map is slow
 - Try converting unordered_map into an array next
+
+## Use array of orders instead of unordered_map
+
+- Results: Add 743, Modify 12, Volume 204, Total 434
+- Add still seems to be very slow

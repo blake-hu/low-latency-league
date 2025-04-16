@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <map>
 #include <queue>
@@ -24,7 +25,8 @@ struct Orderbook {
   std::map<PriceType, std::queue<IdType>, std::greater<PriceType>>
       buyOrderIdByPrices;
   std::map<PriceType, std::queue<IdType>> sellOrderIdByPrices;
-  std::unordered_map<IdType, Order> orderCatalog;
+  std::array<Order, 20000> orderArray;
+  std::array<bool, 20000> orderPresent;
 };
 
 extern "C" {
