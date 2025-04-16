@@ -1,8 +1,8 @@
 #pragma once
 
 #include <cstdint>
-#include <list>
 #include <map>
+#include <queue>
 #include <unordered_map>
 
 enum class Side : uint8_t { BUY, SELL };
@@ -21,9 +21,9 @@ struct Order {
 
 // TODO: Convert std::list to std::queue
 struct Orderbook {
-  std::map<PriceType, std::list<IdType>, std::greater<PriceType>>
+  std::map<PriceType, std::queue<IdType>, std::greater<PriceType>>
       buyOrderIdByPrices;
-  std::map<PriceType, std::list<IdType>> sellOrderIdByPrices;
+  std::map<PriceType, std::queue<IdType>> sellOrderIdByPrices;
   std::unordered_map<IdType, Order> orderCatalog;
 };
 
@@ -47,5 +47,7 @@ Order lookup_order_by_id(Orderbook &orderbook, IdType order_id);
 bool order_exists(Orderbook &orderbook, IdType order_id);
 Orderbook *create_orderbook();
 }
+
+void print_order(Order &order);
 
 void print_orderbook(Orderbook ob);
