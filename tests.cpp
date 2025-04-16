@@ -1,6 +1,7 @@
 #include "engine.hpp"
 #include <cassert>
 #include <iostream>
+#include <ostream>
 
 // We may add to these later on, but will provide additional tests before the
 // deadline
@@ -10,6 +11,7 @@
 void test_lookup_order() {
   std::cout << "Test 0: Simple order lookup" << std::endl;
   Orderbook ob;
+
   Order sellOrder{1, 100, 10, Side::SELL};
   // Initially, order with id 1 should not exist.
   assert(!order_exists(ob, 1));
@@ -32,6 +34,7 @@ void test_lookup_order() {
 void test_simple_match_and_modify() {
   std::cout << "Test 1: Simple match and modify" << std::endl;
   Orderbook ob;
+
   // Insert a sell order.
   Order sellOrder{1, 100, 10, Side::SELL};
   uint32_t matches = match_order(ob, sellOrder);
@@ -45,7 +48,6 @@ void test_simple_match_and_modify() {
   // Remaining sell order should have quantity 5.
   assert(order_exists(ob, 1));
   Order order_lookup = lookup_order_by_id(ob, 1);
-  std::cout << "qty: " << order_lookup.quantity << std::endl;
   assert(order_lookup.quantity == 5);
 
   // Modify the remaining sell order.
@@ -74,6 +76,7 @@ void test_multiple_matches() {
 
   // sellOrder1 should be fully matched; sellOrder2 partially matched (remaining
   // quantity = 2).
+  print_orderbook(ob);
   assert(order_exists(ob, 4));
   Order order_lookup = lookup_order_by_id(ob, 4);
   assert(order_lookup.quantity == 2);

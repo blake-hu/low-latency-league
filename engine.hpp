@@ -2,15 +2,16 @@
 
 #include <array>
 #include <cstdint>
-#include <map>
+#include <optional>
 #include <queue>
-#include <unordered_map>
 
 enum class Side : uint8_t { BUY, SELL };
 
 using IdType = uint32_t;
 using PriceType = uint16_t;
 using QuantityType = uint16_t;
+
+#define PRICE_LEVELS 1024
 
 // You CANNOT change this
 struct Order {
@@ -20,19 +21,25 @@ struct Order {
   Side side;
 };
 
+struct QueueVolume {
+  std::queue<IdType> queue;
+  QuantityType volume;
+};
+
 // TODO: Convert std::list to std::queue
 struct Orderbook {
-  std::map<PriceType, std::queue<IdType>, std::greater<PriceType>>
-      buyOrderIdByPrices;
-  std::map<PriceType, std::queue<IdType>> sellOrderIdByPrices;
-  std::array<Order, 20000> orderArray;
-  std::array<bool, 20000> orderPresent;
+  std::array<std::optional<QueueVolume>, PRICE_LEVELS> buyOrderIdByPrices;
+  std::array<std::optional<QueueVolume>, PRICE_LEVELS> sellOrderIdByPrices;
+  std::array<std::optional<Order>, 1024> orderArray;
 };
 
 extern "C" {
 
 // Takes in an incoming order, matches it, and returns the number of matches
 // Partial fills are valid
+
+uint32_t process_orders(Order &incoming, QueueVolume &queueVolume,
+                        Orderbook &ob);
 
 uint32_t match_order(Orderbook &orderbook, const Order &incoming);
 
@@ -52,4 +59,4 @@ Orderbook *create_orderbook();
 
 void print_order(Order &order);
 
-void print_orderbook(Orderbook ob);
+void print_orderbook(Orderbook &ob);

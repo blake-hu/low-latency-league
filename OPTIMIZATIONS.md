@@ -19,7 +19,7 @@
 - Store map of `(order_id, order)` to get order from order_id
 - Use order price to find orders at price level directly instead of iterating over all price levels
 
-## Use queue of IdTypes instead of list
+### Use queue of IdTypes instead of list
 
 - Results: Add 848, Modify 23, Volume 212, Total 646
 - Theoretically, queue is faster because it allocates a linked list of arrays, which has better spatial locality than a linked list of single elements
@@ -27,7 +27,7 @@
 - This may be because hashing into an unordered_map is slow
 - Try converting unordered_map into an array next
 
-## Use array of orders instead of unordered_map
+### Use array of orders instead of unordered_map
 
 - Results: Add 743, Modify 12, Volume 204, Total 434
 - Add still seems to be very slow
