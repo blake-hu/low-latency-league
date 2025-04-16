@@ -1,5 +1,6 @@
 #include "engine.hpp"
 #include <functional>
+#include <iostream>
 #include <optional>
 #include <stdexcept>
 
@@ -10,29 +11,40 @@
 // Templated helper to process matching orders.
 // The Condition predicate takes the price level and the incoming order price
 // and returns whether the level qualifies.
-template <typename OrderMap, typename Condition>
-uint32_t process_orders(Order &order, OrderMap &ordersMap, Condition cond) {
+template <typename OrderIdByPrices, typename OrderCatalog, typename Condition>
+uint32_t process_orders(Order &order, OrderIdByPrices &orderIdByPrices,
+                        OrderCatalog &orderCatalog, Condition cond) {
   uint32_t matchCount = 0;
-  auto it = ordersMap.begin();
-  while (it != ordersMap.end() && order.quantity > 0 &&
+  auto it = orderIdByPrices.begin();
+  while (it != orderIdByPrices.end() && order.quantity > 0 &&
          (it->first == order.price || cond(it->first, order.price))) {
-    auto &ordersAtPrice = it->second;
-    for (auto orderIt = ordersAtPrice.begin();
-         orderIt != ordersAtPrice.end() && order.quantity > 0;) {
-      QuantityType trade = std::min(order.quantity, orderIt->quantity);
+    auto &orderIdList = it->second;
+    
+    for (auto idIt = orderIdList.begin();
+         idIt != orderIdList.end() && order.quantity > 0;) {
+      auto restingOrderIt = orderCatalog.find(*idIt);
+      if (restingOrderIt == orderCatalog.end()) { // order previously deleted
+        idIt = orderIdList.erase(idIt);
+        continue;
+      }
+
+      Order &restingOrder = restingOrderIt->second;
+      QuantityType trade = std::min(order.quantity, restingOrder.quantity);
       order.quantity -= trade;
-      orderIt->quantity -= trade;
+      restingOrder.quantity -= trade;
       ++matchCount;
-      if (orderIt->quantity == 0)
-        orderIt = ordersAtPrice.erase(orderIt);
-      else
-        ++orderIt;
+      if (restingOrder.quantity == 0) {
+        idIt = orderIdList.erase(idIt);
+        orderCatalog.erase(restingOrder.id);
+      } else
+        ++idIt;
     }
-    if (ordersAtPrice.empty())
-      it = ordersMap.erase(it);
+    if (orderIdList.empty())
+      it = orderIdByPrices.erase(it);
     else
       ++it;
   }
+
   return matchCount;
 }
 
@@ -42,95 +54,82 @@ uint32_t match_order(Orderbook &orderbook, const Order &incoming) {
 
   if (order.side == Side::BUY) {
     // For a BUY, match with sell orders priced at or below the order's price.
-    matchCount = process_orders(order, orderbook.sellOrders, std::less<>());
+    matchCount = process_orders(order, orderbook.sellOrderIdByPrices,
+                                orderbook.orderCatalog, std::less<>());
     if (order.quantity > 0) {
-      orderbook.buyOrders[order.price].push_back(order);
-      orderbook.orders[order.id] = order;
+      orderbook.buyOrderIdByPrices[order.price].push_back(order.id);
+      orderbook.orderCatalog[order.id] = order;
     }
   } else { // Side::SELL
     // For a SELL, match with buy orders priced at or above the order's price.
-    matchCount = process_orders(order, orderbook.buyOrders, std::greater<>());
+    matchCount = process_orders(order, orderbook.buyOrderIdByPrices,
+                                orderbook.orderCatalog, std::greater<>());
     if (order.quantity > 0) {
-      orderbook.sellOrders[order.price].push_back(order);
-      orderbook.orders[order.id] = order;
+      orderbook.sellOrderIdByPrices[order.price].push_back(order.id);
+      orderbook.orderCatalog[order.id] = order;
     }
   }
+
   return matchCount;
 }
 
 // Templated helper to cancel an order within a given orders map.
-template <typename OrderMap>
-bool modify_order_in_map(OrderMap &ordersMap, Order order,
-                         QuantityType new_quantity) {
-  IdType order_id = order.id;
-  PriceType price = order.price;
-  auto orderListIt = ordersMap.find(price);
-  if (orderListIt == ordersMap.end())
-    return false;
+template <typename OrderIdByPrice>
+void delete_order_in_map(OrderIdByPrice &orderIdByPrice, IdType order_id,
+                         PriceType price) {
+  auto orderListIt = orderIdByPrice.find(price);
+  if (orderListIt == orderIdByPrice.end())
+    return; // order not found
   auto &orderList = orderListIt->second;
 
-  for (auto orderIt = orderList.begin(); orderIt != orderList.end();) {
-    if (orderIt->id == order_id) {
-      if (new_quantity == 0)
-        orderIt = orderList.erase(orderIt);
-      else {
-        orderIt->quantity = new_quantity;
-        return true;
-      }
-    } else {
-      ++orderIt;
+  for (auto idIt = orderList.begin(); idIt != orderList.end(); ++idIt) {
+    if (*idIt == order_id) {
+      idIt = orderList.erase(idIt);
+      break;
     }
   }
 
   if (orderList.empty())
-    ordersMap.erase(price);
-
-  return false;
+    orderIdByPrice.erase(price);
 }
 
 void modify_order_by_id(Orderbook &orderbook, IdType order_id,
                         QuantityType new_quantity) {
-  auto orderIt = orderbook.orders.find(order_id);
-  if (orderIt == orderbook.orders.end())
-    return;
-  Order order = orderIt->second;
+  auto orderIt = orderbook.orderCatalog.find(order_id);
+  if (orderIt == orderbook.orderCatalog.end())
+    return; // order does not exist
+  Order &order = orderIt->second;
 
-  if (modify_order_in_map(orderbook.buyOrders, order, new_quantity))
-    return;
-  if (modify_order_in_map(orderbook.sellOrders, order, new_quantity))
-    return;
-}
-
-template <typename OrderMap>
-std::optional<Order> lookup_order_in_map(OrderMap &ordersMap, IdType order_id) {
-  for (const auto &[price, orderList] : ordersMap) {
-    for (const auto &order : orderList) {
-      if (order.id == order_id) {
-        return order;
-      }
-    }
+  if (new_quantity == 0) // delete order
+  {
+    if (order.side == Side::BUY)
+      delete_order_in_map(orderbook.buyOrderIdByPrices, order_id, order.price);
+    else
+      delete_order_in_map(orderbook.sellOrderIdByPrices, order_id, order.price);
+    orderbook.orderCatalog.erase(order_id);
+  } else // modify order
+  {
+    order.quantity = new_quantity;
   }
-  return std::nullopt;
 }
 
-uint32_t get_volume_at_level(Orderbook &orderbook, Side side,
-                             PriceType quantity) {
+uint32_t get_volume_at_level(Orderbook &orderbook, Side side, PriceType price) {
   uint32_t total = 0;
   if (side == Side::BUY) {
-    auto buy_orders = orderbook.buyOrders.find(quantity);
-    if (buy_orders == orderbook.buyOrders.end()) {
+    auto buy_orders = orderbook.buyOrderIdByPrices.find(price);
+    if (buy_orders == orderbook.buyOrderIdByPrices.end()) {
       return 0;
     }
-    for (const auto &order : buy_orders->second) {
-      total += order.quantity;
+    for (const auto &id : buy_orders->second) {
+      total += orderbook.orderCatalog[id].quantity;
     }
   } else if (side == Side::SELL) {
-    auto sell_orders = orderbook.sellOrders.find(quantity);
-    if (sell_orders == orderbook.sellOrders.end()) {
+    auto sell_orders = orderbook.sellOrderIdByPrices.find(price);
+    if (sell_orders == orderbook.sellOrderIdByPrices.end()) {
       return 0;
     }
-    for (const auto &order : sell_orders->second) {
-      total += order.quantity;
+    for (const auto &id : sell_orders->second) {
+      total += orderbook.orderCatalog[id].quantity;
     }
   }
   return total;
@@ -139,19 +138,24 @@ uint32_t get_volume_at_level(Orderbook &orderbook, Side side,
 // Functions below here don't need to be performant. Just make sure they're
 // correct
 Order lookup_order_by_id(Orderbook &orderbook, IdType order_id) {
-  auto order1 = lookup_order_in_map(orderbook.buyOrders, order_id);
-  auto order2 = lookup_order_in_map(orderbook.sellOrders, order_id);
-  if (order1.has_value())
-    return *order1;
-  if (order2.has_value())
-    return *order2;
-  throw std::runtime_error("Order not found");
+  auto orderIt = orderbook.orderCatalog.find(order_id);
+  if (orderIt == orderbook.orderCatalog.end())
+    throw std::runtime_error("Order not found");
+  return orderIt->second;
 }
 
 bool order_exists(Orderbook &orderbook, IdType order_id) {
-  auto order1 = lookup_order_in_map(orderbook.buyOrders, order_id);
-  auto order2 = lookup_order_in_map(orderbook.sellOrders, order_id);
-  return (order1.has_value() || order2.has_value());
+  return orderbook.orderCatalog.find(order_id) != orderbook.orderCatalog.end();
 }
 
 Orderbook *create_orderbook() { return new Orderbook; }
+
+void print_orderbook(Orderbook ob) {
+  auto catalog = ob.orderCatalog;
+  std::cout << "-- ORDERBOOK --" << std::endl;
+  for (auto it = catalog.begin(); it != catalog.end(); it++) {
+    const auto &order = it->second;
+    std::cout << "ID " << order.id << " | Price " << order.price
+              << " | Quantity " << order.quantity << std::endl;
+  }
+}

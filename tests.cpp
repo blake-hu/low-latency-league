@@ -45,6 +45,7 @@ void test_simple_match_and_modify() {
   // Remaining sell order should have quantity 5.
   assert(order_exists(ob, 1));
   Order order_lookup = lookup_order_by_id(ob, 1);
+  std::cout << "qty: " << order_lookup.quantity << std::endl;
   assert(order_lookup.quantity == 5);
 
   // Modify the remaining sell order.

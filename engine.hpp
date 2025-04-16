@@ -19,11 +19,12 @@ struct Order {
   Side side;
 };
 
-// You CAN and SHOULD change this
+// TODO: Convert std::list to std::queue
 struct Orderbook {
-  std::map<PriceType, std::list<Order>, std::greater<PriceType>> buyOrders;
-  std::map<PriceType, std::list<Order>> sellOrders;
-  std::unordered_map<IdType, Order> orders;
+  std::map<PriceType, std::list<IdType>, std::greater<PriceType>>
+      buyOrderIdByPrices;
+  std::map<PriceType, std::list<IdType>> sellOrderIdByPrices;
+  std::unordered_map<IdType, Order> orderCatalog;
 };
 
 extern "C" {
@@ -46,3 +47,5 @@ Order lookup_order_by_id(Orderbook &orderbook, IdType order_id);
 bool order_exists(Orderbook &orderbook, IdType order_id);
 Orderbook *create_orderbook();
 }
+
+void print_orderbook(Orderbook ob);
